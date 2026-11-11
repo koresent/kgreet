@@ -29,6 +29,9 @@ pub struct RuntimeOptions {
 }
 
 pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
+    if let Some(settings) = gtk4::Settings::default() {
+        settings.set_gtk_application_prefer_dark_theme(true);
+    }
     let display = gdk::Display::default().expect("Wayland/X11 display is required");
     apply_css(&display, &cfg);
 

@@ -133,6 +133,8 @@ entry.password-input text placeholder {{
 
 dropdown.kgreet-dropdown > button {{
     background-color: {input_rgba};
+    background-image: none;
+    box-shadow: none;
     color: {text};
     border: 1px solid {input_border_rgba};
     border-radius: 10px;
@@ -155,6 +157,8 @@ button:disabled {{
 
 button.submit-inline {{
     background-color: {accent};
+    background-image: none;
+    box-shadow: none;
     color: {accent_text};
     font-weight: 700;
     border: none;
@@ -212,6 +216,8 @@ button.submit-inline:focus-visible {{
 
 button.power-circle {{
     background-color: {dock_rgba};
+    background-image: none;
+    box-shadow: none;
     color: {text};
     border: 1px solid {card_border_rgba};
     border-radius: 999px;
@@ -222,6 +228,7 @@ button.power-circle {{
 
 button.power-circle:hover:not(:disabled) {{
     background-color: {dock_hover_rgba};
+    background-image: none;
     border-color: {accent};
 }}
 
@@ -236,6 +243,8 @@ button.power-circle:focus-visible {{
 
 button.power-button {{
     background-color: transparent;
+    background-image: none;
+    box-shadow: none;
     color: {text};
     border: 1px solid transparent;
     border-radius: 8px;
@@ -247,6 +256,7 @@ button.power-button {{
 
 button.power-button:hover:not(:disabled) {{
     background-color: {dock_hover_rgba};
+    background-image: none;
     border-color: {card_border_rgba};
 }}
 
@@ -257,6 +267,8 @@ button.power-button:focus-visible {{
 
 button.confirm-danger {{
     background-color: {error};
+    background-image: none;
+    box-shadow: none;
     color: {accent_text};
     font-weight: 700;
     border: none;
@@ -272,6 +284,8 @@ button.confirm-danger:focus-visible {{
 
 button.confirm-cancel {{
     background-color: {input_bg};
+    background-image: none;
+    box-shadow: none;
     color: {text};
     border: 1px solid {card_border_rgba};
     border-radius: 8px;

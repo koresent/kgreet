@@ -29,7 +29,13 @@ pub fn select_monitors(display: &gdk::Display, cfg: &MonitorConfig) -> MonitorSe
 
     let target = cfg.target.trim();
     let primary_idx = if target.is_empty() || target.eq_ignore_ascii_case("primary") {
-        0
+        // Prefer landscape outputs over rotated portrait monitors when no connector is specified.
+        all.iter()
+            .position(|m| {
+                let g = m.geometry();
+                g.width() >= g.height()
+            })
+            .unwrap_or(0)
     } else {
         all.iter()
             .position(|m| {
