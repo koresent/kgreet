@@ -1,0 +1,17 @@
+[package]
+name = "kgreet"
+version = "0.1.0"
+edition = "2024"
+description = "Wayland greetd login greeter built with GTK4 and gtk4-layer-shell"
+license = "GPL-3.0"
+
+[dependencies]
+greetd_ipc = { version = "0.10", features = ["sync-codec"] }
+gtk4 = { version = "0.9", features = ["v4_12"] }
+gtk4-layer-shell = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
+
+[profile.release]
+lto = "thin"
+strip = true
