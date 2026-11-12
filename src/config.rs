@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub user: UserConfig,
@@ -13,6 +13,7 @@ pub struct Config {
     pub input: InputConfig,
     pub appearance: AppearanceConfig,
     pub wallpaper: WallpaperConfig,
+    pub clock: ClockConfig,
     pub power: PowerConfig,
     pub keyboard: KeyboardConfig,
 }
@@ -166,24 +167,93 @@ pub enum PowerPosition {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct KeyboardConfig {
-    pub show_capslock_warning: bool,
+pub struct ClockConfig {
+    pub enabled: bool,
+    pub position: String,
+    pub time_format: String,
+    pub date_format: String,
+    pub subtitle: Option<String>,
+    pub time_font_size: f64,
+    pub date_font_size: f64,
+    pub subtitle_font_size: f64,
+    pub time_color: Option<String>,
+    pub date_color: Option<String>,
+    pub subtitle_color: Option<String>,
+    pub time_bold: bool,
 }
 
-impl Default for Config {
+impl ClockConfig {
+    pub fn resolve_subtitle(&self, username: &str, session: &str) -> Option<String> {
+        let raw = self.subtitle.as_deref()?.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        let mut res = raw.to_string();
+        if res.contains("{os}") {
+            res = res.replace("{os}", &read_os_name());
+        }
+        if res.contains("{session}") {
+            res = res.replace("{session}", session);
+        }
+        if res.contains("{host}") {
+            res = res.replace("{host}", &read_hostname());
+        }
+        if res.contains("{user}") {
+            res = res.replace("{user}", username);
+        }
+        Some(res)
+    }
+}
+
+impl Default for ClockConfig {
     fn default() -> Self {
         Self {
-            user: UserConfig::default(),
-            session: SessionConfig::default(),
-            monitor: MonitorConfig::default(),
-            card: CardConfig::default(),
-            input: InputConfig::default(),
-            appearance: AppearanceConfig::default(),
-            wallpaper: WallpaperConfig::default(),
-            power: PowerConfig::default(),
-            keyboard: KeyboardConfig::default(),
+            enabled: true,
+            position: "top-center".to_string(),
+            time_format: "%H:%M".to_string(),
+            date_format: "%A, %d %B".to_string(),
+            subtitle: None,
+            time_font_size: 54.0,
+            date_font_size: 18.0,
+            subtitle_font_size: 13.0,
+            time_color: None,
+            date_color: None,
+            subtitle_color: None,
+            time_bold: false,
         }
     }
+}
+
+fn read_os_name() -> String {
+    if let Ok(content) = fs::read_to_string("/etc/os-release") {
+        for key in ["PRETTY_NAME=", "NAME="] {
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix(key) {
+                    let clean = val.trim().trim_matches('"').trim_matches('\'');
+                    if !clean.is_empty() {
+                        return clean.to_string();
+                    }
+                }
+            }
+        }
+    }
+    "Linux".to_string()
+}
+
+fn read_hostname() -> String {
+    if let Ok(h) = fs::read_to_string("/etc/hostname") {
+        let trimmed = h.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    "localhost".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct KeyboardConfig {
+    pub show_capslock_warning: bool,
 }
 
 impl Default for UserConfig {

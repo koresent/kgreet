@@ -28,6 +28,26 @@ pub fn build_css(cfg: &Config) -> String {
     let warn_bg = hex_to_rgba(&cfg.appearance.accent_color, 0.16);
     let warn_border = hex_to_rgba(&cfg.appearance.accent_color, 0.72);
 
+    let clock_time_color = cfg
+        .clock
+        .time_color
+        .as_deref()
+        .map(|c| hex_to_rgba(c, 1.0))
+        .unwrap_or_else(|| hex_to_rgba(&cfg.appearance.text_color, 0.92));
+    let clock_date_color = cfg
+        .clock
+        .date_color
+        .as_deref()
+        .map(|c| hex_to_rgba(c, 1.0))
+        .unwrap_or_else(|| hex_to_rgba(&cfg.appearance.muted_color, 0.85));
+    let clock_sub_color = cfg
+        .clock
+        .subtitle_color
+        .as_deref()
+        .map(|c| hex_to_rgba(c, 1.0))
+        .unwrap_or_else(|| hex_to_rgba(&cfg.appearance.muted_color, 0.65));
+    let clock_time_weight = if cfg.clock.time_bold { "700" } else { "400" };
+
     let caret_color = if cfg.input.cursor_glide.enabled {
         "transparent"
     } else {
@@ -92,18 +112,41 @@ entry.password-input {{
     background-image: none;
     box-shadow: none;
     color: {text};
-    border: 1px solid {input_border_rgba};
+    border: 1.5px solid {input_border_rgba};
     border-radius: {input_radius}px;
-    padding: 4px 16px;
+    padding: 4px 44px 4px 16px;
     min-height: {input_height}px;
     caret-color: {caret_color};
     outline: none;
 }}
 
 entry.password-input:focus-within {{
-    border: 1px solid {input_focus};
+    border: 1.5px solid {input_focus};
     box-shadow: none;
     outline: none;
+}}
+
+entry.password-input.input-error,
+entry.password-input.input-error:focus-within {{
+    border: 2px solid {error};
+    box-shadow: none;
+    outline: none;
+}}
+
+button.peek-inline {{
+    background-color: transparent;
+    background-image: none;
+    box-shadow: none;
+    border: none;
+    border-radius: 999px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    margin-right: 7px;
+}}
+
+button.peek-inline:hover {{
+    background-color: rgba(235, 219, 178, 0.14);
 }}
 
 entry.password-input text {{
@@ -169,7 +212,8 @@ button.submit-inline {{
 }}
 
 button.submit-inline:hover:not(:disabled) {{
-    filter: brightness(1.08);
+    filter: brightness(1.12);
+    box-shadow: 0 0 0 1.5px rgba(235, 219, 178, 0.35);
 }}
 
 button.submit-inline:active:not(:disabled) {{
@@ -297,6 +341,22 @@ button.confirm-cancel:focus-visible {{
     outline: 2px solid {accent};
     outline-offset: 2px;
 }}
+
+.kgreet-clock-time {{
+    font-size: {clock_time_size}px;
+    font-weight: {clock_time_weight};
+    color: {clock_time_color};
+}}
+
+.kgreet-clock-date {{
+    font-size: {clock_date_size}px;
+    color: {clock_date_color};
+}}
+
+.kgreet-clock-subtitle {{
+    font-size: {clock_sub_size}px;
+    color: {clock_sub_color};
+}}
 "#,
         solid_bg = cfg.wallpaper.solid_color,
         text = cfg.appearance.text_color,
@@ -328,6 +388,13 @@ button.confirm-cancel:focus-visible {{
         warn_bg = warn_bg,
         warn_border = warn_border,
         power_size = cfg.power.button_size,
+        clock_time_size = cfg.clock.time_font_size,
+        clock_time_weight = clock_time_weight,
+        clock_time_color = clock_time_color,
+        clock_date_size = cfg.clock.date_font_size,
+        clock_date_color = clock_date_color,
+        clock_sub_size = cfg.clock.subtitle_font_size,
+        clock_sub_color = clock_sub_color,
     )
 }
 

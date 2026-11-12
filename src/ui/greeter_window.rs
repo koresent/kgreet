@@ -2,8 +2,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use gtk4::cairo;
 use gtk4::gdk;
 use gtk4::gdk_pixbuf;
 use gtk4::glib;
@@ -122,6 +123,7 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
 
     let card = build_login_card(
         app,
+        &window,
         &cfg,
         &users,
         &sessions,
@@ -129,6 +131,19 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
         Rc::clone(&wallpaper_guard),
     );
     root_overlay.add_overlay(&card);
+
+    if cfg.clock.enabled {
+        let default_user = users
+            .first()
+            .map(|u| u.username.as_str())
+            .unwrap_or("user");
+        let default_sess = sessions
+            .first()
+            .map(|se| se.name.as_str())
+            .unwrap_or(&cfg.session.default);
+        let clock_box = build_clock_widget(&cfg, default_user, default_sess);
+        root_overlay.add_overlay(&clock_box);
+    }
 
     let confirm_state: Rc<RefCell<Option<gtk4::Box>>> = Rc::new(RefCell::new(None));
     if cfg.power.enabled && (cfg.power.show_suspend || cfg.power.show_reboot || cfg.power.show_poweroff) {
@@ -160,10 +175,12 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
         sec.present();
     }
     window.present();
+    animate_window_fade_in(&window);
 }
 
 fn build_login_card(
     app: &gtk4::Application,
+    window: &gtk4::ApplicationWindow,
     cfg: &Config,
     users: &Rc<Vec<UserEntry>>,
     sessions: &Rc<Vec<SessionEntry>>,
@@ -285,13 +302,14 @@ fn build_login_card(
     };
     let password_entry = gtk4::PasswordEntry::builder()
         .placeholder_text(placeholder_text)
-        .show_peek_icon(cfg.input.show_peek_icon)
+        .show_peek_icon(false)
         .hexpand(true)
         .build();
     password_entry.add_css_class("password-input");
     password_entry.add_css_class("masked");
     password_entry.update_property(&[gtk4::accessible::Property::Label(s.password_label)]);
 
+    let mut text_delegate: Option<gtk4::Text> = None;
     let mut input_widget: Option<gtk4::Overlay> = None;
     if let Some(delegate) = password_entry.delegate()
         && let Ok(text_widget) = delegate.downcast::<gtk4::Text>()
@@ -311,6 +329,7 @@ fn build_login_card(
             &cfg.input.cursor_glide,
             &cfg.appearance.accent_color,
         ));
+        text_delegate = Some(text_widget);
     }
 
     let submit_icon = gtk4::Image::from_icon_name("go-next-symbolic");
@@ -326,11 +345,21 @@ fn build_login_card(
     unlock_button.set_cursor_from_name(Some("pointer"));
     unlock_button.update_property(&[gtk4::accessible::Property::Label(s.unlock_button)]);
 
-    if let Some(overlay) = input_widget {
-        pass_row.append(&overlay);
-    } else {
-        pass_row.append(&password_entry);
+    let entry_overlay = input_widget.unwrap_or_else(|| {
+        let ov = gtk4::Overlay::new();
+        ov.set_hexpand(true);
+        ov.set_child(Some(&password_entry));
+        ov
+    });
+
+    if cfg.input.show_peek_icon
+        && let Some(ref text_widget) = text_delegate
+    {
+        let peek_btn = build_peek_button(text_widget, cfg);
+        entry_overlay.add_overlay(&peek_btn);
     }
+
+    pass_row.append(&entry_overlay);
     pass_row.append(&unlock_button);
     card.append(&pass_row);
 
@@ -387,7 +416,9 @@ fn build_login_card(
 
     // Clear stale auth error as soon as the user edits the password.
     let err_on_type = error_banner.clone();
+    let entry_on_type = password_entry.clone();
     password_entry.connect_changed(move |_| {
+        entry_on_type.remove_css_class("input-error");
         if err_on_type.is_visible() {
             err_on_type.set_visible(false);
         }
@@ -396,6 +427,8 @@ fn build_login_card(
     let auth_busy = Rc::new(Cell::new(false));
     let submit_auth = {
         let app = app.clone();
+        let window_c = window.clone();
+        let card_c = card.clone();
         let cfg = cfg.clone();
         let users = Rc::clone(users);
         let sessions = Rc::clone(sessions);
@@ -418,8 +451,7 @@ fn build_login_card(
             };
             let password = password_entry.text().to_string();
             if password.is_empty() {
-                set_banner_text(&error_banner, s.err_empty_password);
-                error_banner.set_visible(true);
+                trigger_card_shake(&card_c, &password_entry);
                 password_entry.grab_focus();
                 return;
             }
@@ -436,6 +468,7 @@ fn build_login_card(
 
             auth_busy.set(true);
             error_banner.set_visible(false);
+            password_entry.remove_css_class("input-error");
             password_entry.set_sensitive(false);
             unlock_button.set_sensitive(false);
             unlock_button.set_cursor_from_name(Some("not-allowed"));
@@ -460,6 +493,8 @@ fn build_login_card(
             });
 
             let app_c = app.clone();
+            let win_c = window_c.clone();
+            let shake_card = card_c.clone();
             let pass_c = password_entry.clone();
             let btn_c = unlock_button.clone();
             let err_c = error_banner.clone();
@@ -470,10 +505,10 @@ fn build_login_card(
                 Ok(Ok(())) => {
                     // Stop video decoder cleanly before greetd spawns the user session.
                     wp_guard.borrow_mut().take();
-                    app_c.quit();
+                    animate_window_fade_out_and_quit(&win_c, &app_c);
                     glib::ControlFlow::Break
                 }
-                Ok(Err(msg)) => {
+                Ok(Err(_msg)) => {
                     busy_c.set(false);
                     pass_c.set_text("");
                     pass_c.set_sensitive(true);
@@ -483,8 +518,7 @@ fn build_login_card(
                     let icon = gtk4::Image::from_icon_name("go-next-symbolic");
                     icon.set_pixel_size(18);
                     btn_c.set_child(Some(&icon));
-                    set_banner_text(&err_c, &msg);
-                    err_c.set_visible(true);
+                    trigger_card_shake(&shake_card, &pass_c);
                     pass_c.grab_focus();
                     glib::ControlFlow::Break
                 }
@@ -816,4 +850,235 @@ fn apply_css(display: &gdk::Display, cfg: &Config) {
         &provider,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+}
+
+fn animate_window_fade_in(window: &gtk4::ApplicationWindow) {
+    window.set_opacity(0.0);
+    let start = Instant::now();
+    let duration_secs = 0.22;
+    let win_c = window.clone();
+    window.add_tick_callback(move |_, _| {
+        let t = (start.elapsed().as_secs_f64() / duration_secs).clamp(0.0, 1.0);
+        let eased = 1.0 - (1.0 - t).powi(3);
+        win_c.set_opacity(eased);
+        if t >= 1.0 {
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
+}
+
+fn animate_window_fade_out_and_quit(window: &gtk4::ApplicationWindow, app: &gtk4::Application) {
+    let start = Instant::now();
+    let duration_secs = 0.20;
+    let win_c = window.clone();
+    let app_c = app.clone();
+    window.add_tick_callback(move |_, _| {
+        let t = (start.elapsed().as_secs_f64() / duration_secs).clamp(0.0, 1.0);
+        let eased = (1.0 - t).powi(2);
+        win_c.set_opacity(eased);
+        if t >= 1.0 {
+            app_c.quit();
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
+}
+
+fn trigger_card_shake(card: &gtk4::Box, entry: &gtk4::PasswordEntry) {
+    entry.add_css_class("input-error");
+    let start = Instant::now();
+    let duration_secs = 0.35;
+    let card_c = card.clone();
+    card.add_tick_callback(move |_, _| {
+        let elapsed = start.elapsed().as_secs_f64();
+        if elapsed >= duration_secs {
+            card_c.set_margin_start(0);
+            card_c.set_margin_end(0);
+            return glib::ControlFlow::Break;
+        }
+        let decay = 1.0 - (elapsed / duration_secs);
+        let offset = ((elapsed * 38.0).sin() * 14.0 * decay * decay).round() as i32;
+        card_c.set_margin_start(offset);
+        card_c.set_margin_end(-offset);
+        glib::ControlFlow::Continue
+    });
+}
+
+fn build_clock_widget(cfg: &Config, username: &str, session: &str) -> gtk4::Box {
+    let clock_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    clock_box.set_can_target(false);
+
+    match cfg.clock.position.as_str() {
+        "top-left" => {
+            clock_box.set_halign(gtk4::Align::Start);
+            clock_box.set_valign(gtk4::Align::Start);
+            clock_box.set_margin_start(48);
+            clock_box.set_margin_top(48);
+        }
+        "top-right" => {
+            clock_box.set_halign(gtk4::Align::End);
+            clock_box.set_valign(gtk4::Align::Start);
+            clock_box.set_margin_end(48);
+            clock_box.set_margin_top(48);
+        }
+        _ => {
+            clock_box.set_halign(gtk4::Align::Center);
+            clock_box.set_valign(gtk4::Align::Start);
+            clock_box.set_margin_top(120);
+        }
+    }
+
+    let time_lbl = gtk4::Label::new(None);
+    time_lbl.add_css_class("kgreet-clock-time");
+    let date_lbl = gtk4::Label::new(None);
+    date_lbl.add_css_class("kgreet-clock-date");
+
+    clock_box.append(&time_lbl);
+    clock_box.append(&date_lbl);
+
+    if let Some(sub) = cfg.clock.resolve_subtitle(username, session) {
+        let sub_lbl = gtk4::Label::new(Some(&sub));
+        sub_lbl.add_css_class("kgreet-clock-subtitle");
+        clock_box.append(&sub_lbl);
+    }
+
+    let time_fmt = cfg.clock.time_format.clone();
+    let date_fmt = cfg.clock.date_format.clone();
+    let update_clock = {
+        let time_lbl = time_lbl.clone();
+        let date_lbl = date_lbl.clone();
+        move || {
+            if let Ok(now) = glib::DateTime::now_local() {
+                if let Ok(t) = now.format(&time_fmt) {
+                    time_lbl.set_text(&t);
+                }
+                if let Ok(d) = now.format(&date_fmt) {
+                    date_lbl.set_text(&d);
+                }
+            }
+        }
+    };
+
+    update_clock();
+    glib::timeout_add_local(Duration::from_millis(500), move || {
+        update_clock();
+        glib::ControlFlow::Continue
+    });
+
+    clock_box
+}
+
+fn build_peek_button(text_widget: &gtk4::Text, cfg: &Config) -> gtk4::Button {
+    let peek_btn = gtk4::Button::builder()
+        .halign(gtk4::Align::End)
+        .valign(gtk4::Align::Center)
+        .focus_on_click(false)
+        .build();
+    peek_btn.add_css_class("peek-inline");
+    peek_btn.set_cursor_from_name(Some("pointer"));
+
+    let da = gtk4::DrawingArea::builder()
+        .content_width(20)
+        .content_height(20)
+        .build();
+    peek_btn.set_child(Some(&da));
+
+    let hovered = Rc::new(Cell::new(false));
+    let accent_rgb = parse_hex_rgb(&cfg.appearance.accent_color);
+    let text_rgb = parse_hex_rgb(&cfg.appearance.text_color);
+    let muted_rgb = parse_hex_rgb(&cfg.appearance.muted_color);
+
+    let tw_draw = text_widget.clone();
+    let hov_draw = Rc::clone(&hovered);
+    da.set_draw_func(move |_, cr, w, h| {
+        let revealed = tw_draw.is_visible();
+        let (r, g, b, a) = if revealed {
+            (accent_rgb.0, accent_rgb.1, accent_rgb.2, 0.98)
+        } else if hov_draw.get() {
+            (text_rgb.0, text_rgb.1, text_rgb.2, 0.95)
+        } else {
+            (muted_rgb.0, muted_rgb.1, muted_rgb.2, 0.72)
+        };
+
+        let s = (w as f64 / 16.0).min(h as f64 / 16.0);
+        let sx = (w as f64 - 16.0 * s) / 2.0;
+        let sy = (h as f64 - 16.0 * s) / 2.0;
+
+        cr.set_source_rgba(r, g, b, a);
+        cr.set_fill_rule(cairo::FillRule::EvenOdd);
+        cr.new_path();
+
+        // Adwaita view-reveal-symbolic contour, cutout ring, and pupil
+        cr.move_to(sx + 8.0 * s, sy + 2.0 * s);
+        cr.curve_to(sx + 4.3515 * s, sy + 2.0039 * s, sx + 1.1680 * s, sy + 4.4766 * s, sx + 0.2617 * s, sy + 8.0078 * s);
+        cr.curve_to(sx + 1.1758 * s, sy + 11.5351 * s, sx + 4.3594 * s, sy + 13.9961 * s, sx + 8.0 * s, sy + 14.0 * s);
+        cr.curve_to(sx + 11.6484 * s, sy + 13.9961 * s, sx + 14.8320 * s, sy + 11.5351 * s, sx + 15.7383 * s, sy + 8.0078 * s);
+        cr.curve_to(sx + 14.8242 * s, sy + 4.4648 * s, sx + 11.6406 * s, sy + 2.0039 * s, sx + 8.0 * s, sy + 2.0 * s);
+        cr.close_path();
+
+        cr.move_to(sx + 8.0 * s, sy + 4.0 * s);
+        cr.curve_to(sx + 10.2109 * s, sy + 4.0 * s, sx + 12.0 * s, sy + 5.7891 * s, sx + 12.0 * s, sy + 8.0 * s);
+        cr.curve_to(sx + 12.0 * s, sy + 10.2109 * s, sx + 10.2109 * s, sy + 12.0 * s, sx + 8.0 * s, sy + 12.0 * s);
+        cr.curve_to(sx + 5.7891 * s, sy + 12.0 * s, sx + 4.0 * s, sy + 10.2109 * s, sx + 4.0 * s, sy + 8.0 * s);
+        cr.curve_to(sx + 4.0 * s, sy + 5.7891 * s, sx + 5.7891 * s, sy + 4.0 * s, sx + 8.0 * s, sy + 4.0 * s);
+        cr.close_path();
+
+        cr.move_to(sx + 8.0 * s, sy + 6.0 * s);
+        cr.curve_to(sx + 6.8945 * s, sy + 6.0 * s, sx + 6.0 * s, sy + 6.8945 * s, sx + 6.0 * s, sy + 8.0 * s);
+        cr.curve_to(sx + 6.0 * s, sy + 9.1055 * s, sx + 6.8945 * s, sy + 10.0 * s, sx + 8.0 * s, sy + 10.0 * s);
+        cr.curve_to(sx + 9.1055 * s, sy + 10.0 * s, sx + 10.0 * s, sy + 9.1055 * s, sx + 10.0 * s, sy + 8.0 * s);
+        cr.curve_to(sx + 10.0 * s, sy + 6.8945 * s, sx + 9.1055 * s, sy + 6.0 * s, sx + 8.0 * s, sy + 6.0 * s);
+        cr.close_path();
+
+        let _ = cr.fill();
+
+        if revealed {
+            cr.set_line_width(1.8 * s);
+            cr.set_line_cap(cairo::LineCap::Round);
+            cr.move_to(sx + 1.5312 * s, sy + 0.4687 * s);
+            cr.line_to(sx + 15.5312 * s, sy + 14.4687 * s);
+            let _ = cr.stroke();
+        }
+    });
+
+    let motion = gtk4::EventControllerMotion::new();
+    let hov_enter = Rc::clone(&hovered);
+    let da_enter = da.clone();
+    motion.connect_enter(move |_, _, _| {
+        hov_enter.set(true);
+        da_enter.queue_draw();
+    });
+    let hov_leave = Rc::clone(&hovered);
+    let da_leave = da.clone();
+    motion.connect_leave(move |_| {
+        hov_leave.set(false);
+        da_leave.queue_draw();
+    });
+    peek_btn.add_controller(motion);
+
+    let tw_click = text_widget.clone();
+    let da_click = da.clone();
+    peek_btn.connect_clicked(move |_| {
+        tw_click.set_visibility(!tw_click.is_visible());
+        da_click.queue_draw();
+    });
+
+    peek_btn
+}
+
+fn parse_hex_rgb(hex: &str) -> (f64, f64, f64) {
+    let trimmed = hex.trim().trim_start_matches('#');
+    if trimmed.len() == 6
+        && let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&trimmed[0..2], 16),
+            u8::from_str_radix(&trimmed[2..4], 16),
+            u8::from_str_radix(&trimmed[4..6], 16),
+        )
+    {
+        return (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+    }
+    (0.74, 0.68, 0.58)
 }

@@ -40,7 +40,7 @@ pub fn discover_sessions(default_session: &str) -> Vec<SessionEntry> {
         }
     }
 
-    sessions.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    sessions.sort_by_key(|a| a.name.to_lowercase());
 
     if let Some(pos) = find_default_index(&sessions, default_session) {
         let preferred = sessions.remove(pos);

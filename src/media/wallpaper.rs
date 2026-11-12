@@ -140,14 +140,13 @@ fn load_current(ctrl: &Rc<RefCell<WallpaperController>>, target_size: (i32, i32)
                 }
             }
         }
-        Some(MediaKind::Video) => {
-            if !start_video_playback(ctrl, &path, &cfg, target_size) {
-                eprintln!(
-                    "kgreet: failed to start video wallpaper '{}', falling back",
-                    path.display()
-                );
-            }
+        Some(MediaKind::Video) if !start_video_playback(ctrl, &path, &cfg, target_size) => {
+            eprintln!(
+                "kgreet: failed to start video wallpaper '{}', falling back",
+                path.display()
+            );
         }
+        Some(MediaKind::Video) => {}
         None => {}
     }
 }

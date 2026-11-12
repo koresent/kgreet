@@ -96,6 +96,23 @@ wallpaper:
   video_loop: true
   solid_color: "#1d2021"
 
+clock:
+  enabled: true
+  # "top-center", "top-left", "top-right"
+  position: "top-center"
+  time_format: "%H:%M"
+  date_format: "%A, %d %B"
+  # Optional 3rd line below date: null disables it.
+  # Supports placeholders: {os}, {session}, {host}, {user} or any custom text.
+  subtitle: null
+  time_font_size: 54.0
+  date_font_size: 18.0
+  subtitle_font_size: 13.0
+  time_bold: false
+  time_color: null
+  date_color: null
+  subtitle_color: null
+
 power:
   enabled: true
   # "bottom-center", "bottom-left", "bottom-right", "top-center", "top-left", "top-right"
