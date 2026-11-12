@@ -282,7 +282,7 @@ impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
             target: "primary".to_string(),
-            secondary_mode: SecondaryMonitorMode::None,
+            secondary_mode: SecondaryMonitorMode::Wallpaper,
         }
     }
 }
@@ -498,7 +498,7 @@ mod tests {
         let parsed: Config = serde_yaml_ng::from_str(raw).expect("example YAML config must parse");
         assert!(!parsed.session.show_selector);
         assert_eq!(parsed.power.position, PowerPosition::BottomCenter);
-        assert_eq!(parsed.monitor.secondary_mode, SecondaryMonitorMode::None);
+        assert_eq!(parsed.monitor.secondary_mode, SecondaryMonitorMode::Wallpaper);
         assert!(parsed.user.show_display_name);
         assert_eq!(parsed.card.avatar_size, 96);
         assert_eq!(parsed.input.dot_spacing, 2);

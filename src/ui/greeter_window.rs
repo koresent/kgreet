@@ -99,6 +99,8 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
         }
     }
 
+    let secondary_windows = Rc::new(secondary_windows);
+
     let root_overlay = gtk4::Overlay::new();
     root_overlay.set_hexpand(true);
     root_overlay.set_vexpand(true);
@@ -129,6 +131,7 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
         &sessions,
         &opts,
         Rc::clone(&wallpaper_guard),
+        Rc::clone(&secondary_windows),
     );
     root_overlay.add_overlay(&card);
 
@@ -171,8 +174,9 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
         eprintln!("kgreet config warning: {warn}");
     }
 
-    for sec in &secondary_windows {
+    for sec in secondary_windows.iter() {
         sec.present();
+        animate_window_fade_in(sec);
     }
     window.present();
     animate_window_fade_in(&window);
@@ -186,6 +190,7 @@ fn build_login_card(
     sessions: &Rc<Vec<SessionEntry>>,
     opts: &RuntimeOptions,
     wallpaper_guard: Rc<RefCell<Option<Rc<RefCell<crate::media::wallpaper::WallpaperController>>>>>,
+    secondary_windows: Rc<Vec<gtk4::ApplicationWindow>>,
 ) -> gtk4::Box {
     let s = &STRINGS;
 
@@ -502,12 +507,13 @@ fn build_login_card(
             let err_c = error_banner.clone();
             let busy_c = Rc::clone(&auth_busy);
             let wp_guard = Rc::clone(&wallpaper_guard);
+            let sec_c = Rc::clone(&secondary_windows);
 
             glib::timeout_add_local(Duration::from_millis(20), move || match rx.try_recv() {
                 Ok(Ok(())) => {
                     // Stop video decoder cleanly before greetd spawns the user session.
                     wp_guard.borrow_mut().take();
-                    animate_window_fade_out_and_quit(&win_c, &app_c);
+                    animate_window_fade_out_and_quit(&win_c, &sec_c, &app_c);
                     glib::ControlFlow::Break
                 }
                 Ok(Err(_msg)) => {
@@ -871,15 +877,23 @@ fn animate_window_fade_in(window: &gtk4::ApplicationWindow) {
     });
 }
 
-fn animate_window_fade_out_and_quit(window: &gtk4::ApplicationWindow, app: &gtk4::Application) {
+fn animate_window_fade_out_and_quit(
+    window: &gtk4::ApplicationWindow,
+    secondary_windows: &[gtk4::ApplicationWindow],
+    app: &gtk4::Application,
+) {
     let start = Instant::now();
     let duration_secs = 0.20;
     let win_c = window.clone();
     let app_c = app.clone();
+    let sec_clones: Vec<gtk4::ApplicationWindow> = secondary_windows.to_vec();
     window.add_tick_callback(move |_, _| {
         let t = (start.elapsed().as_secs_f64() / duration_secs).clamp(0.0, 1.0);
         let eased = (1.0 - t).powi(2);
         win_c.set_opacity(eased);
+        for sec in &sec_clones {
+            sec.set_opacity(eased);
+        }
         if t >= 1.0 {
             app_c.quit();
             glib::ControlFlow::Break

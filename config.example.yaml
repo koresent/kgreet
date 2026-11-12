@@ -29,7 +29,7 @@ monitor:
   # "primary" selects the primary/first display; or specify a connector name (e.g. "DP-2").
   target: primary
   # Behavior on non-primary displays: "none" (untouched), "black", or "wallpaper".
-  secondary_mode: none
+  secondary_mode: wallpaper
 
 card:
   background_color: "#282828"

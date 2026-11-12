@@ -64,11 +64,7 @@ pub fn configure_layer_window(
 
     window.init_layer_shell();
     window.set_namespace(Some("kgreet"));
-    window.set_layer(if interactive {
-        Layer::Overlay
-    } else {
-        Layer::Top
-    });
+    window.set_layer(Layer::Overlay);
     window.set_exclusive_zone(-1);
     window.set_anchor(Edge::Top, true);
     window.set_anchor(Edge::Bottom, true);
