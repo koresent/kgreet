@@ -114,8 +114,8 @@ entry.password-input {{
     color: {text};
     border: 1.5px solid {input_border_rgba};
     border-radius: {input_radius}px;
-    padding: 4px 44px 4px 16px;
-    min-height: {input_height}px;
+    padding: 0 44px 0 16px;
+    min-height: 0;
     caret-color: {caret_color};
     outline: none;
 }}
@@ -142,7 +142,7 @@ button.peek-inline {{
     min-width: 28px;
     min-height: 28px;
     padding: 0;
-    margin-right: 7px;
+    margin: 0 7px 0 0;
 }}
 
 button.peek-inline:hover {{

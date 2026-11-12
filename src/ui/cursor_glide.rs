@@ -205,6 +205,14 @@ pub fn attach_cursor_glide(
         upd_changed(true);
     });
 
+    let upd_vis = Rc::clone(&update_cursor);
+    text_widget.connect_visibility_notify(move |_| {
+        let upd = Rc::clone(&upd_vis);
+        glib::idle_add_local_once(move || {
+            upd(true);
+        });
+    });
+
     let upd_focus = Rc::clone(&update_cursor);
     text_widget.connect_has_focus_notify(move |_| {
         upd_focus(false);

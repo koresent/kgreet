@@ -141,7 +141,7 @@ pub fn launch_ui(app: &gtk4::Application, cfg: Config, opts: RuntimeOptions) {
             .first()
             .map(|se| se.name.as_str())
             .unwrap_or(&cfg.session.default);
-        let clock_box = build_clock_widget(&cfg, default_user, default_sess);
+        let clock_box = build_clock_widget(&cfg, default_user, default_sess, target_size.1);
         root_overlay.add_overlay(&clock_box);
     }
 
@@ -191,7 +191,7 @@ fn build_login_card(
 
     let card = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Vertical)
-        .spacing(14)
+        .spacing(12)
         .halign(gtk4::Align::Center)
         .valign(gtk4::Align::Center)
         .width_request(cfg.card.width)
@@ -303,6 +303,8 @@ fn build_login_card(
     let password_entry = gtk4::PasswordEntry::builder()
         .placeholder_text(placeholder_text)
         .show_peek_icon(false)
+        .height_request(cfg.input.height)
+        .valign(gtk4::Align::Center)
         .hexpand(true)
         .build();
     password_entry.add_css_class("password-input");
@@ -907,7 +909,7 @@ fn trigger_card_shake(card: &gtk4::Box, entry: &gtk4::PasswordEntry) {
     });
 }
 
-fn build_clock_widget(cfg: &Config, username: &str, session: &str) -> gtk4::Box {
+fn build_clock_widget(cfg: &Config, username: &str, session: &str, screen_h: i32) -> gtk4::Box {
     let clock_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     clock_box.set_can_target(false);
 
@@ -925,9 +927,10 @@ fn build_clock_widget(cfg: &Config, username: &str, session: &str) -> gtk4::Box 
             clock_box.set_margin_top(48);
         }
         _ => {
+            let top_margin = ((screen_h.max(480) as f64) * 0.18).round() as i32;
             clock_box.set_halign(gtk4::Align::Center);
             clock_box.set_valign(gtk4::Align::Start);
-            clock_box.set_margin_top(120);
+            clock_box.set_margin_top(top_margin);
         }
     }
 
@@ -973,6 +976,8 @@ fn build_clock_widget(cfg: &Config, username: &str, session: &str) -> gtk4::Box 
 
 fn build_peek_button(text_widget: &gtk4::Text, cfg: &Config) -> gtk4::Button {
     let peek_btn = gtk4::Button::builder()
+        .width_request(28)
+        .height_request(28)
         .halign(gtk4::Align::End)
         .valign(gtk4::Align::Center)
         .focus_on_click(false)
@@ -983,6 +988,8 @@ fn build_peek_button(text_widget: &gtk4::Text, cfg: &Config) -> gtk4::Button {
     let da = gtk4::DrawingArea::builder()
         .content_width(20)
         .content_height(20)
+        .halign(gtk4::Align::Center)
+        .valign(gtk4::Align::Center)
         .build();
     peek_btn.set_child(Some(&da));
 
@@ -1064,6 +1071,11 @@ fn build_peek_button(text_widget: &gtk4::Text, cfg: &Config) -> gtk4::Button {
     peek_btn.connect_clicked(move |_| {
         tw_click.set_visibility(!tw_click.is_visible());
         da_click.queue_draw();
+    });
+
+    let da_vis = da.clone();
+    text_widget.connect_visibility_notify(move |_| {
+        da_vis.queue_draw();
     });
 
     peek_btn
