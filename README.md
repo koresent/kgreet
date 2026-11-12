@@ -2,6 +2,9 @@
 
 Wayland `greetd` login greeter written in Rust using GTK4 and `gtk4-layer-shell`.
 
+> [!NOTE]
+> `kgreet` is designed to pair seamlessly with [`klock`](https://github.com/koresent/klock) for a unified login-to-lockscreen experience — sharing the same visual design, animations, and configuration style.
+
 ![kgreet preview](assets/preview.webp)
 
 ## Features
